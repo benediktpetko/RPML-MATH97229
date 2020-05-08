@@ -5,12 +5,11 @@ import scipy as sp
 import pandas as pd
 import iisignature as iisig
 import matplotlib.pyplot as plt
+import seaborn as sns
+
 from sklearn.linear_model import LinearRegression 
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
-
-
-
 
 
 #%%
@@ -18,14 +17,15 @@ class sde(object):
     """
     Class for numerical computation of an Ito diffusion by the Milstein scheme and linear regression on increments and signature.
     Parameters:
-    --------
-    drift:    drift coefficient
-        
-    diffusion: diffusion coefficient
-
-    time:    terminal time of the simulation
-
-    steps:   number of discretization steps
+    -----------
+    drift:    function
+        drift coefficient
+    diffusion: function
+        diffusion coefficient
+    time:    float
+        terminal time of the simulation
+    steps:   int
+        number of discretization steps
     """
 
     def __init__(self, drift = lambda y:  1 - y, diffusion = lambda y: y**2, ydim = 1, y_0 = 0):
@@ -55,6 +55,7 @@ class sde(object):
         dt = time / steps   # time step
         self.dt = dt
         
+        np.random.seed(0)
         W = np.sqrt(dt)*np.random.randn(steps, rep)    # generate Wiener noise
 
         y = np.zeros((steps + 1, rep))
@@ -65,10 +66,31 @@ class sde(object):
         
         self.milstein = y
         self.noise = W
+        self.target = self.milstein[self.steps,:]
 
-    def plot_paths(self):
-        plt.plot(np.arange(self.steps+1)*self.dt, self.milstein)
-        plt.show()
+    def plot_paths(self, paths=10):
+        """
+        Method for plotting simulated sample paths.
+        Parameters:
+        ----------
+        paths: int
+            number of sample paths to be plotted (default=5)
+        """
+        fig = plt.figure(1)
+        plt.title("Sample paths of the numerical solution to the SDE")
+        for i in range(paths):
+            sns.lineplot(x=np.arange(self.steps+1)*self.dt, y=self.milstein[:,i])
+        plt.xlabel("t")
+        plt.ylabel("y")
+        fig.show()
+
+        fig = plt.figure(2)
+        plt.title("Empirical distribution of the solution at terminal time")
+        sns.distplot(self.target)
+        plt.xlabel("t")
+        plt.ylabel("f(y)")
+        fig.show()
+        #plt.show()
 
 
     def regression_ols(self, method="increments", level=2):
@@ -81,22 +103,28 @@ class sde(object):
         level: int
             truncate the signature at given level
         """
+        self.level = level
+
+        if not hasattr(self, "target"):
+            raise AttributeError("Missing sample paths. Please run compute_milstein_scheme() method first.")
 
         if method == "increments":
             model = LinearRegression()
 
-            features = np.concatenate((np.transpose([np.ones(self.rep)*self.dt]), np.transpose(self.noise)), axis = 1)
-            target = self.milstein[self.steps,:]
+            increment_features = np.concatenate((np.transpose([np.ones(self.rep)*self.dt]), np.transpose(self.noise)), axis = 1)
+            self.increment_features = increment_features
 
-            X_train, X_test, y_train, y_test = train_test_split(features, target, train_size=0.5)
+            X_train, X_test, y_train, y_test = train_test_split(self.increment_features, self.target, train_size=0.5)
 
             model.fit(X_train, y_train)
 
             y_pred = model.predict(X_test)
             err = mean_squared_error(y_pred, y_test)
-            print("Mean squared error: ", err)
+            print("Mean squared error for increment features: ", err)
 
         if method == "signature":
+            model = LinearRegression()
+
             number_of_features = 2 ** (level +1 ) - 2 
 
             signature_features = np.zeros((self.rep, number_of_features))
@@ -104,12 +132,20 @@ class sde(object):
             self.time_col = np.transpose([np.cumsum(np.ones(self.steps)*self.dt)])
 
             for i in range(self.rep):
+
                 path = np.concatenate((self.time_col, np.transpose([np.cumsum(self.noise[:,i])])), axis = 1)
 
                 signature_features[i,:] = iisig.sig(path, level)
             
             self.signature_features = signature_features
-        
+
+            X_train, X_test, y_train, y_test = train_test_split(self.signature_features, self.target, train_size=0.5)
+
+            model.fit(X_train, y_train)
+            y_pred = model.predict(X_test)
+            err = mean_squared_error(y_pred, y_test)
+            print(f"Mean squared error for signature features up to level {self.level}:", err)
+
         
         if method == "logsignature":
             pass
@@ -117,8 +153,10 @@ class sde(object):
 #%%
 if __name__=="__main__":
     sim = sde()
-    sim.compute_milstein_scheme()
+    sim.compute_milstein_scheme(time=0.5)
     #sim.plot_paths()
+    sim.regression_ols(method="increments")
+    for i in [2,4,6]:
+        sim.regression_ols(method="signature", level=i)
 
-    sim.regression_ols(method="signature")
 # %%
