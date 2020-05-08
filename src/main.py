@@ -10,6 +10,9 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
 
 
+
+
+
 #%%
 class sde(object):
     """
@@ -36,13 +39,14 @@ class sde(object):
         Simulate according to the Milstein scheme. Creates attribute sde.milstein
         Parameters:
         ----------
-        time :  terminal time of simulation
-
-        steps :  number of discretization steps
-
-        rep :   number of replications
-
-        d_diffusion : derivative of diffusion coefficient
+        time :  float
+            terminal time of simulation
+        steps :  int
+            number of discretization steps
+        rep :   int
+            number of replications
+        d_diffusion : function 
+            derivative of diffusion coefficient
         """
         self.steps = steps
         self.d_diffusion = d_diffusion
@@ -67,12 +71,15 @@ class sde(object):
         plt.show()
 
 
-    def regression_ols(self, method="increments"):
+    def regression_ols(self, method="increments", level=2):
         """
-        Compute coefficients of linear regression with the increments or signature as features.
+        Compute least squares errors of linear regression with the increments or signature as features.
         Parameters:
         -----------
-        method:  {"increments","signature","logsignature"}
+        method:  string
+            {"increments","signature","logsignature"}
+        level: int
+            truncate the signature at given level
         """
 
         if method == "increments":
@@ -84,12 +91,24 @@ class sde(object):
             X_train, X_test, y_train, y_test = train_test_split(features, target, train_size=0.5)
 
             model.fit(X_train, y_train)
+
             y_pred = model.predict(X_test)
             err = mean_squared_error(y_pred, y_test)
             print("Mean squared error: ", err)
 
         if method == "signature":
-            pass
+            number_of_features = 2 ** (level +1 ) - 2 
+
+            signature_features = np.zeros((self.rep, number_of_features))
+
+            self.time_col = np.transpose([np.cumsum(np.ones(self.steps)*self.dt)])
+
+            for i in range(self.rep):
+                path = np.concatenate((self.time_col, np.transpose([np.cumsum(self.noise[:,i])])), axis = 1)
+
+                signature_features[i,:] = iisig.sig(path, level)
+            
+            self.signature_features = signature_features
         
         
         if method == "logsignature":
@@ -101,5 +120,5 @@ if __name__=="__main__":
     sim.compute_milstein_scheme()
     #sim.plot_paths()
 
-    sim.regression_ols()
+    sim.regression_ols(method="signature")
 # %%
