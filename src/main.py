@@ -1,4 +1,4 @@
-# main.py
+# src/main.py
 #%%
 import numpy as np
 import scipy as sp
@@ -28,13 +28,13 @@ class sde(object):
         number of discretization steps
     """
 
-    def __init__(self, drift = lambda y:  1 - y, diffusion = lambda y: y**2, ydim = 1, y_0 = 0):
+    def __init__(self, drift = lambda y:  1 - y, diffusion = lambda y: 2*y**2, ydim = 1, y_0 = 0):
         self.drift = drift
         self.diffusion = diffusion
         self.ydim = ydim
         self.y_0 = y_0
     
-    def compute_milstein_scheme(self, time = 0.25, steps = 250, rep = 1600, d_diffusion = lambda y: 2*y):
+    def compute_milstein_scheme(self, time = 0.25, steps = 250, rep = 1600, d_diffusion = lambda y: 4*y):
         """
         Simulate according to the Milstein scheme. Creates attribute sde.milstein
         Parameters:
@@ -55,7 +55,6 @@ class sde(object):
         dt = time / steps   # time step
         self.dt = dt
         
-        np.random.seed(0)
         W = np.sqrt(dt)*np.random.randn(steps, rep)    # generate Wiener noise
 
         y = np.zeros((steps + 1, rep))
@@ -68,15 +67,18 @@ class sde(object):
         self.noise = W
         self.target = self.milstein[self.steps,:]
 
+        if np.any(np.isnan(y)):
+            raise ValueError("The simulation is unstable - simulated paths contain NaN entries.")
+
     def plot_paths(self, paths=10):
         """
-        Method for plotting simulated sample paths.
+        Plot simulated sample paths.
         Parameters:
         ----------
         paths: int
-            number of sample paths to be plotted (default=5)
+            number of sample paths to be plotted (default=10)
         """
-        fig = plt.figure(1)
+        fig = plt.figure()
         plt.title("Sample paths of the numerical solution to the SDE")
         for i in range(paths):
             sns.lineplot(x=np.arange(self.steps+1)*self.dt, y=self.milstein[:,i])
@@ -84,13 +86,16 @@ class sde(object):
         plt.ylabel("y")
         fig.show()
 
-        fig = plt.figure(2)
+    def plot_density(self):
+        """
+        Plot empirical density of the response variable at terminal time.
+        """
+        fig = plt.figure()
         plt.title("Empirical distribution of the solution at terminal time")
         sns.distplot(self.target)
         plt.xlabel("t")
         plt.ylabel("f(y)")
         fig.show()
-        #plt.show()
 
 
     def regression_ols(self, method="increments", level=2):
@@ -125,7 +130,7 @@ class sde(object):
         if method == "signature":
             model = LinearRegression()
 
-            number_of_features = 2 ** (level +1 ) - 2 
+            number_of_features = 2 ** (level + 1 ) - 2 
 
             signature_features = np.zeros((self.rep, number_of_features))
 
@@ -152,11 +157,16 @@ class sde(object):
 
 #%%
 if __name__=="__main__":
+    np.random.seed(0)
     sim = sde()
-    sim.compute_milstein_scheme(time=0.5)
-    #sim.plot_paths()
+    sim.compute_milstein_scheme(time=0.25)
+    sim.plot_paths(paths=5)
+    plt.show()
     sim.regression_ols(method="increments")
     for i in [2,4,6]:
         sim.regression_ols(method="signature", level=i)
+
+    ### Example of singular behaviour
+    #plt.ylim(top=30); sns.lineplot(x=np.arange(sim.steps+1),y=sim.milstein[:,1335])
 
 # %%
