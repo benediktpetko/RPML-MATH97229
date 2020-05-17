@@ -125,7 +125,9 @@ class sde(object):
 
             y_pred = model.predict(X_test)
             err = mean_squared_error(y_pred, y_test)
+            R_score = model.score(X_test,y_test)
             print("Mean squared error for increment features: ", err)
+            print("R^2 score for increment features:", R_score)
 
         if method == "signature":
             model = LinearRegression()
@@ -149,7 +151,9 @@ class sde(object):
             model.fit(X_train, y_train)
             y_pred = model.predict(X_test)
             err = mean_squared_error(y_pred, y_test)
+            R_score = model.score(X_test, y_test)
             print(f"Mean squared error for signature features up to level {self.level}:", err)
+            print(f"R^2 score for signature features up to level {self.level}:", R_score)
 
         
         if method == "logsignature":
@@ -159,7 +163,7 @@ class sde(object):
 if __name__=="__main__":
     np.random.seed(0)
     sim = sde()
-    sim.compute_milstein_scheme(time=0.25)
+    sim.compute_milstein_scheme(time=1.0, steps = 1000)
     sim.plot_paths(paths=5)
     plt.show()
     sim.regression_ols(method="increments")
